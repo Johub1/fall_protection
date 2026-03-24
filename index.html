@@ -1,0 +1,1776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fall Protection 3D Simulator</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+
+:root {
+  --cyan:    #00d4ff;
+  --orange:  #ff9500;
+  --red:     #ff2040;
+  --green:   #00ff88;
+  --yellow:  #ffe030;
+  --bg:      #060a12;
+  --panel:   rgba(6,12,22,0.92);
+  --border:  #0e2840;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: var(--bg);
+  color: #d0e8f0;
+  font-family: 'Rajdhani', sans-serif;
+  overflow: hidden;
+  height: 100vh; width: 100vw;
+}
+
+#canvas-container { position:fixed; inset:0; }
+
+/* ── TOP HUD ── */
+#hud-top {
+  position:fixed; top:0; left:0; right:0;
+  z-index:10; pointer-events:none;
+  padding:14px 18px;
+  display:flex; justify-content:space-between; align-items:flex-start;
+}
+#title-block h1 {
+  font-family:'Rajdhani',sans-serif;
+  font-size:14px; font-weight:700;
+  color: var(--cyan); letter-spacing:2px;
+  text-transform:uppercase;
+  text-shadow: 0 0 18px #00d4ff55;
+}
+#title-block p {
+  font-size:10px; color:#4a7a9a; margin-top:2px; letter-spacing:1px;
+  font-family:'JetBrains Mono',monospace;
+}
+
+/* ── STAT BOXES ── */
+.stat-row { display:flex; gap:8px; }
+.stat-box {
+  background: var(--panel);
+  border:1px solid var(--border);
+  border-top:2px solid var(--cyan);
+  padding:7px 12px; min-width:90px;
+}
+.stat-label { font-size:8px; color:#4a7a9a; letter-spacing:1px; text-transform:uppercase; font-family:'JetBrains Mono',monospace; }
+.stat-val {
+  font-family:'JetBrains Mono',monospace;
+  font-size:15px; font-weight:700;
+  color: var(--cyan); margin-top:1px;
+}
+.stat-val.safe  { color: var(--green); }
+.stat-val.warn  { color: var(--orange); }
+.stat-val.danger{ color: var(--red); animation: blink .7s infinite; }
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+/* ── STATUS BADGE ── */
+#status-badge {
+  position:fixed; top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  z-index:20; pointer-events:none;
+  text-align:center; opacity:0;
+  transition:opacity .3s;
+  backdrop-filter:blur(6px);
+  padding:14px 32px;
+}
+#status-badge.show { opacity:1; }
+#status-badge .badge-main {
+  font-family:'Rajdhani',sans-serif;
+  font-size:24px; font-weight:700; letter-spacing:4px;
+}
+#status-badge .badge-sub {
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px; margin-top:4px; letter-spacing:1px;
+}
+#status-badge.safe-mode  { border:2px solid var(--green); background:rgba(0,255,136,.1); }
+#status-badge.safe-mode  .badge-main { color:var(--green); }
+#status-badge.safe-mode  .badge-sub  { color:#88ffcc; }
+#status-badge.danger-mode{ border:2px solid var(--red);   background:rgba(255,32,64,.15); }
+#status-badge.danger-mode .badge-main{ color:var(--red); }
+#status-badge.danger-mode .badge-sub { color:#ffaaaa; }
+
+/* ── RIGHT PANEL: CONTROLS ── */
+#ctrl-panel {
+  position:fixed; right:18px; top:50%; transform:translateY(-50%);
+  z-index:10;
+  background: var(--panel);
+  border:1px solid var(--border);
+  border-right:3px solid var(--cyan);
+  padding:16px 14px; width:200px;
+}
+#ctrl-panel h3 {
+  font-family:'Rajdhani',sans-serif;
+  font-size:10px; font-weight:700; color:var(--cyan);
+  letter-spacing:2px; text-transform:uppercase; margin-bottom:12px;
+}
+.ctrl-row { margin-bottom:13px; }
+.ctrl-row label {
+  font-size:10px; color:#6a9ab0; display:block;
+  margin-bottom:4px; letter-spacing:.5px;
+  font-family:'JetBrains Mono',monospace;
+}
+.ctrl-row .ctrl-val {
+  font-size:11px; color:var(--cyan); float:right;
+  font-family:'JetBrains Mono',monospace;
+}
+input[type=range] { width:100%; accent-color:var(--cyan); height:4px; }
+
+.radio-group { display:flex; flex-direction:column; gap:5px; margin-top:4px; }
+.radio-opt {
+  display:flex; align-items:center; gap:7px;
+  font-family:'JetBrains Mono',monospace; font-size:10px; color:#8ab0c8;
+  cursor:pointer;
+}
+.radio-opt input { accent-color:var(--cyan); }
+.radio-opt.active-opt { color:var(--cyan); }
+
+/* ── LEFT PANEL: CALCULATIONS ── */
+#calc-panel {
+  position:fixed; left:18px; top:50%; transform:translateY(-50%);
+  z-index:10;
+  background: var(--panel);
+  border:1px solid var(--border);
+  border-left:3px solid var(--orange);
+  padding:16px 14px; width:195px;
+}
+#calc-panel h3 {
+  font-family:'Rajdhani',sans-serif;
+  font-size:10px; font-weight:700; color:var(--orange);
+  letter-spacing:2px; text-transform:uppercase; margin-bottom:12px;
+}
+.calc-row {
+  display:flex; justify-content:space-between; align-items:center;
+  margin-bottom:8px; padding-bottom:8px;
+  border-bottom:1px solid #0e2840;
+}
+.calc-row:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0; }
+.calc-label { font-size:9px; color:#6a9ab0; font-family:'JetBrains Mono',monospace; line-height:1.4; max-width:100px; }
+.calc-num {
+  font-family:'JetBrains Mono',monospace;
+  font-size:13px; font-weight:700; color:var(--cyan);
+  white-space:nowrap;
+}
+.calc-num.warn   { color:var(--orange); }
+.calc-num.danger { color:var(--red); }
+.calc-num.safe   { color:var(--green); }
+
+.calc-total {
+  margin-top:10px; padding:8px;
+  background:rgba(0,212,255,.06);
+  border:1px solid rgba(0,212,255,.2);
+}
+.calc-total .calc-label { color:#aacfe0; }
+.calc-total .calc-num   { font-size:15px; }
+
+/* ── LEGEND ── */
+#legend {
+  position:fixed; left:18px; bottom:80px;
+  z-index:10; pointer-events:none;
+  background: var(--panel);
+  border:1px solid var(--border);
+  border-left:3px solid var(--orange);
+  padding:12px 14px;
+}
+#legend h3 {
+  font-family:'Rajdhani',sans-serif; font-size:9px;
+  color:var(--orange); letter-spacing:2px; margin-bottom:8px;
+}
+.leg-item { display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:9px; color:#8ab0c8; font-family:'JetBrains Mono',monospace; }
+.leg-swatch { width:12px; height:12px; border-radius:2px; flex-shrink:0; }
+
+/* ── BOTTOM CONTROLS ── */
+#btn-bar {
+  position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
+  z-index:10; display:flex; gap:8px; flex-wrap:wrap; justify-content:center;
+}
+.btn {
+  background: var(--panel);
+  border:1px solid #1a3a50;
+  color:#90bcd0;
+  font-family:'Rajdhani',sans-serif;
+  font-size:11px; font-weight:600;
+  padding:8px 16px; cursor:pointer;
+  letter-spacing:1px; text-transform:uppercase;
+  transition:all .15s;
+}
+.btn:hover { background:rgba(0,212,255,.15); border-color:var(--cyan); color:var(--cyan); }
+.btn.active { background:rgba(0,212,255,.2); border-color:var(--cyan); color:var(--cyan); box-shadow:0 0 10px #00d4ff33; }
+.btn.sim-btn { border-color:var(--orange); color:var(--orange); }
+.btn.sim-btn:hover { background:rgba(255,149,0,.2); }
+.btn.danger-btn { border-color:var(--red); color:var(--red); }
+</style>
+</head>
+<body>
+<div id="canvas-container"></div>
+
+<!-- TOP HUD -->
+<div id="hud-top">
+  <div id="title-block">
+    <h1>⚠ Fall Protection 3D Simulator</h1>
+    <p>OSHA 29 CFR 1926.502 · ANSI/ASSE Z359.1 · Personal Fall Arrest Systems</p>
+  </div>
+  <div class="stat-row">
+    <div class="stat-box">
+      <div class="stat-label">Free Fall</div>
+      <div class="stat-val" id="s-freefall">0.0m</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Total Fall</div>
+      <div class="stat-val" id="s-total">0.0m</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Clearance</div>
+      <div class="stat-val" id="s-clear">0.0m</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Status</div>
+      <div class="stat-val" id="s-status">SAFE</div>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS BADGE -->
+<div id="status-badge">
+  <div class="badge-main" id="badge-main">⚠ GROUND IMPACT</div>
+  <div class="badge-sub"  id="badge-sub">Insufficient clearance below working level</div>
+</div>
+
+<!-- LEFT PANEL: CALCULATIONS -->
+<div id="calc-panel">
+  <h3>📐 PFAS Calculation</h3>
+  <div class="calc-row">
+    <div class="calc-label">Platform<br>Height</div>
+    <div class="calc-num" id="c-platform">6.0m</div>
+  </div>
+  <div class="calc-row">
+    <div class="calc-label">Anchor<br>Height</div>
+    <div class="calc-num" id="c-anchor">8.0m</div>
+  </div>
+  <div class="calc-row">
+    <div class="calc-label">Lanyard<br>Length</div>
+    <div class="calc-num" id="c-lanyard">1.8m</div>
+  </div>
+  <div class="calc-row">
+    <div class="calc-label">Free Fall<br>Distance</div>
+    <div class="calc-num" id="c-freefall">1.2m</div>
+  </div>
+  <div class="calc-row">
+    <div class="calc-label">D-ring height<br>(OSHA 5ft)</div>
+    <div class="calc-num">1.52m</div>
+  </div>
+  <div class="calc-row">
+    <div class="calc-label">Decel dist<br>(ANSI 3.5ft max)</div>
+    <div class="calc-num">1.07m</div>
+  </div>
+  <div class="calc-row">
+    <div class="calc-label">Harness elong.<br>(OSHA 1ft)</div>
+    <div class="calc-num">0.30m</div>
+  </div>
+  <div class="calc-row">
+    <div class="calc-label">Safety margin<br>(OSHA 1ft)</div>
+    <div class="calc-num">0.30m</div>
+  </div>
+  <div class="calc-total calc-row">
+    <div class="calc-label">Optimal Anchor<br>(zero free fall)</div>
+    <div class="calc-num warn" id="c-minanchor">9.2m</div>
+  </div>
+  <div class="calc-total calc-row" style="margin-top:4px">
+    <div class="calc-label">Required Floor<br>Clearance</div>
+    <div class="calc-num" id="c-required">3.12m</div>
+  </div>
+  <div class="calc-total calc-row" style="margin-top:4px">
+    <div class="calc-label">Actual<br>Clearance</div>
+    <div class="calc-num safe" id="c-actual">3.48m</div>
+  </div>
+</div>
+
+<!-- RIGHT PANEL: CONTROLS -->
+<div id="ctrl-panel">
+  <h3>⚙ Parameters</h3>
+
+  <div class="ctrl-row">
+    <label>Platform Height <span class="ctrl-val" id="v-platform">6.0m</span></label>
+    <input type="range" id="sl-platform" min="2" max="20" value="6" step="0.5">
+  </div>
+
+  <div class="ctrl-row">
+    <label>Anchor Height <span class="ctrl-val" id="v-anchor">8.0m</span></label>
+    <input type="range" id="sl-anchor" min="1" max="25" value="8" step="0.5">
+  </div>
+
+  <div class="ctrl-row">
+    <label>Lanyard Type</label>
+    <div class="radio-group">
+      <label class="radio-opt">
+        <input type="radio" name="lanyard" value="1.8" checked> Standard 6ft (1.8m)
+      </label>
+      <label class="radio-opt">
+        <input type="radio" name="lanyard" value="1.2"> Short 4ft (1.2m)
+      </label>
+      <label class="radio-opt">
+        <input type="radio" name="lanyard" value="0.6"> SRL (0.6m)
+      </label>
+    </div>
+  </div>
+  <div style="margin-top:10px;padding:8px;background:rgba(0,180,255,.06);border:1px solid #0e3050;font-family:'JetBrains Mono',monospace;">
+    <div style="font-size:9px;color:#00d4ff;letter-spacing:1px;margin-bottom:6px;">PFAS SPECS</div>
+    <div id="pfas-specs" style="font-size:9px;color:#8ab0c8;line-height:1.7;"></div>
+  </div>
+</div>
+
+<!-- LEGEND -->
+<div id="legend">
+  <h3>ZONE LEGEND</h3>
+  <div class="leg-item"><div class="leg-swatch" style="background:#ff203088;border:1px solid #ff2030"></div>Free Fall Zone</div>
+  <div class="leg-item"><div class="leg-swatch" style="background:#ff950066;border:1px solid #ff9500"></div>Deceleration Zone (1.07m)</div>
+  <div class="leg-item"><div class="leg-swatch" style="background:#ffe03055;border:1px solid #ffe030"></div>Harness Stretch (0.25m)</div>
+  <div class="leg-item"><div class="leg-swatch" style="background:#00ff8833;border:1px solid #00ff88"></div>Safe Clearance</div>
+  <div class="leg-item"><div class="leg-swatch" style="background:#ff203055;border:1px solid #ff2030"></div>DANGER — Ground Impact</div>
+</div>
+
+<!-- BOTTOM BUTTONS -->
+<div id="btn-bar">
+  <button class="btn active" id="btn-orbit"  onclick="setView('orbit')">🔄 Rotate</button>
+  <button class="btn" id="btn-side"   onclick="setView('side')">◀ Side View</button>
+  <button class="btn" id="btn-front"  onclick="setView('front')">▶ Front View</button>
+  <button class="btn" id="btn-top"    onclick="setView('top')">🔼 Top View</button>
+  <button class="btn sim-btn" id="btn-sim" onclick="startFallSim()">▶ SIMULATE FALL</button>
+  <button class="btn" id="btn-zones" onclick="toggleZones()">👁 ZONES</button>
+  <button class="btn" id="btn-dims"  onclick="toggleDims()">📏 DIMENSIONS</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════
+// CONSTANTS — OSHA 29 CFR 1926.502 / ANSI Z359.1
+// ═══════════════════════════════════════════════════════
+// ── OSHA 29 CFR 1926.502 Appendix C constants ──
+const D_RING      = 1.52;  // D-ring height from feet: 5 ft (OSHA Appendix C)
+const DECEL       = 1.07;  // Max deceleration distance: 3.5 ft (ANSI Z359.1)
+const STRETCH     = 0.30;  // Harness elongation: 1 ft (OSHA Appendix C)
+const SAFETY_MARG = 0.30;  // Safety factor: 1 ft (OSHA 1926.502(d)(16))
+const OSHA_MAX_FF = 1.83;  // Max free fall: 6 ft = 1.83m (OSHA 1926.502(d)(16)(iii))
+
+// ═══════════════════════════════════════════════════════
+// SCENE
+// ═══════════════════════════════════════════════════════
+const W = window.innerWidth, H = window.innerHeight;
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(W, H);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.85;
+document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x060a12);
+scene.fog = new THREE.FogExp2(0x060a12, 0.025);
+
+const camera = new THREE.PerspectiveCamera(55, W/H, 0.1, 300);
+camera.position.set(12, 8, 14);
+camera.lookAt(0, 5, 0);
+
+// Lighting
+scene.add(new THREE.AmbientLight(0x102030, 0.8));
+const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+sun.position.set(10, 20, 8);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.left = -20; sun.shadow.camera.right = 20;
+sun.shadow.camera.top  =  30; sun.shadow.camera.bottom= -5;
+scene.add(sun);
+const fillLight = new THREE.PointLight(0x00aaff, 0.3, 30);
+fillLight.position.set(-5, 10, -5);
+scene.add(fillLight);
+
+// ═══════════════════════════════════════════════════════
+// MATERIALS
+// ═══════════════════════════════════════════════════════
+const concreteMat= new THREE.MeshStandardMaterial({color:0x3a4a54,roughness:.9,metalness:.05});
+const steelMat   = new THREE.MeshStandardMaterial({color:0x556677,roughness:.35,metalness:.8});
+const rustMat    = new THREE.MeshStandardMaterial({color:0x8b5a3a,roughness:.8,metalness:.3});
+const rebar      = new THREE.MeshStandardMaterial({color:0x6a4030,roughness:.7,metalness:.5});
+const darkMat    = new THREE.MeshStandardMaterial({color:0x0d1520,roughness:.9});
+const yellowMat  = new THREE.MeshStandardMaterial({color:0xffcc00,roughness:.5,emissive:0x332200});
+const skinMat    = new THREE.MeshStandardMaterial({color:0xf0b878,roughness:.8});
+const vestMat    = new THREE.MeshStandardMaterial({color:0xff6600,roughness:.7});
+const helmetMat  = new THREE.MeshStandardMaterial({color:0xffee00,roughness:.4,metalness:.2});
+const harnessMat = new THREE.MeshStandardMaterial({color:0x1a2030,roughness:.8});
+const jeansMat   = new THREE.MeshStandardMaterial({color:0x1a3a6a,roughness:.8});
+const bootMat    = new THREE.MeshStandardMaterial({color:0x1a0f08,roughness:.9});
+
+// ═══════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════
+function mkBox(w,h,d,mat,x,y,z,parent=scene){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
+  m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true;
+  parent.add(m); return m;
+}
+function mkCyl(rt,rb,h,seg,mat,x,y,z,rx=0,ry=0,parent=scene){
+  const m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg),mat);
+  m.position.set(x,y,z); m.rotation.set(rx,ry,0);
+  m.castShadow=true; parent.add(m); return m;
+}
+
+// ═══════════════════════════════════════════════════════
+// GROUND
+// ═══════════════════════════════════════════════════════
+const groundGeo = new THREE.PlaneGeometry(60,60,20,20);
+const groundMat = new THREE.MeshStandardMaterial({color:0x1c2830,roughness:.95});
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI/2; ground.receiveShadow=true;
+scene.add(ground);
+
+// Ground grid
+const grid = new THREE.GridHelper(60,30,0x1a3040,0x0e2030);
+grid.position.y = 0.01; scene.add(grid);
+
+// ═══════════════════════════════════════════════════════
+// BUILDING STRUCTURE
+// ═══════════════════════════════════════════════════════
+const buildGroup = new THREE.Group();
+scene.add(buildGroup);
+
+function buildPlatform(platformH) {
+  // Clear previous
+  while(buildGroup.children.length) buildGroup.remove(buildGroup.children[0]);
+
+  // Concrete slab
+  mkBox(8, 0.22, 5, concreteMat, 0, platformH, 0, buildGroup);
+
+  // Exposed rebar edges
+  for(let x=-3.5; x<=3.5; x+=0.35){
+    const r=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,0.18,6),rebar);
+    r.position.set(x, platformH+0.18, 2.4); buildGroup.add(r);
+  }
+
+  // Concrete columns (2 front)
+  for(let x of [-3,3]){
+    mkBox(0.4,platformH,0.4,concreteMat,x,platformH/2,-2,buildGroup);
+  }
+  // Columns rear
+  for(let x of [-3,3]){
+    mkBox(0.4,platformH+3,0.4,concreteMat,x,(platformH+3)/2,-1.8,buildGroup);
+  }
+
+  // Rebars exposed at slab edge
+  for(let z=-2;z<=2;z+=0.4){
+    const r=new THREE.Mesh(new THREE.CylinderGeometry(0.015,0.015,0.3,6),rebar);
+    r.position.set(3.8, platformH+0.1, z); buildGroup.add(r);
+  }
+
+  // Warning stripe at edge
+  const stripeMat2=new THREE.MeshStandardMaterial({color:0xffcc00,roughness:.8});
+  mkBox(0.12,0.08,5,stripeMat2,3.6,platformH+0.15,0,buildGroup);
+}
+
+// ═══════════════════════════════════════════════════════
+// OVERHEAD STRUCTURE + ANCHOR
+// ═══════════════════════════════════════════════════════
+const anchorGroup = new THREE.Group();
+scene.add(anchorGroup);
+
+const anchorIndicator = new THREE.Group();
+scene.add(anchorIndicator);
+
+// Recommended minimum anchor line (dashed horizontal)
+const minAnchorGroup = new THREE.Group();
+scene.add(minAnchorGroup);
+
+function buildAnchorStructure(platformH, anchorH) {
+  while(anchorGroup.children.length) anchorGroup.remove(anchorGroup.children[0]);
+  while(anchorIndicator.children.length) anchorIndicator.remove(anchorIndicator.children[0]);
+
+  // ── H-BEAM positioned directly above the slab edge ──
+  // aZ=1.8: just 0.6m behind the slab edge (z=2.4), directly above worker
+  // This is the realistic OSHA setup — anchor over the work area near the edge
+  const beamZ = 1.8;
+
+  // Vertical steel columns rising from slab surface to beam height
+  for(let x of [-3.5, 3.5]){
+    const colH = anchorH - platformH + 0.4;
+    const col = new THREE.Mesh(new THREE.BoxGeometry(0.32,colH,0.32),steelMat);
+    col.position.set(x, platformH + colH/2, beamZ);
+    col.castShadow=true; anchorGroup.add(col);
+    // Base plate welded to slab
+    const base=new THREE.Mesh(new THREE.BoxGeometry(0.55,0.06,0.55),steelMat);
+    base.position.set(x, platformH+0.03, beamZ); anchorGroup.add(base);
+  }
+
+  // Horizontal I-beam spanning the work area
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(8.2,0.24,0.22),steelMat);
+  beam.position.set(0, anchorH, beamZ);
+  beam.castShadow=true; anchorGroup.add(beam);
+  // I-beam flanges (top + bottom)
+  const flange1=new THREE.Mesh(new THREE.BoxGeometry(8.2,0.07,0.48),steelMat);
+  flange1.position.set(0, anchorH+0.155, beamZ); anchorGroup.add(flange1);
+  const flange2=new THREE.Mesh(new THREE.BoxGeometry(8.2,0.07,0.48),steelMat);
+  flange2.position.set(0, anchorH-0.155, beamZ); anchorGroup.add(flange2);
+
+  // Cross-bracing between columns and rear structure
+  for(let x of [-2.8, 2.8]){
+    const diagH = anchorH - platformH;
+    if(diagH > 0.5){
+      const diagLen = Math.sqrt(diagH*diagH + 0.6*0.6);
+      const diag=new THREE.Mesh(new THREE.BoxGeometry(0.09,diagLen,0.09),steelMat);
+      diag.position.set(x, platformH + diagH/2, beamZ);
+      diag.rotation.z = Math.atan2(0.6, diagH);
+      anchorGroup.add(diag);
+    }
+  }
+
+  // Safety cable / horizontal lifeline along beam (red)
+  const hlMat=new THREE.MeshStandardMaterial({color:0xdd2200,roughness:.5,metalness:.6});
+  const hl=new THREE.Mesh(new THREE.CylinderGeometry(0.018,0.018,8.0,8),hlMat);
+  hl.rotation.z=Math.PI/2; hl.position.set(0, anchorH-0.22, beamZ+0.1); anchorGroup.add(hl);
+
+  // ── BEAM CLAMP ANCHOR ASSEMBLY ──
+  const aX=0.2, aZ=1.8;  // directly above worker at slab edge
+  const clampMat=new THREE.MeshStandardMaterial({color:0xd0c8b8,roughness:.18,metalness:.88});
+  // Clamp body (top, clamped to flange)
+  const clampBody=new THREE.Mesh(new THREE.BoxGeometry(0.32,0.09,0.16),clampMat);
+  clampBody.position.set(aX,anchorH-0.085,aZ); anchorGroup.add(clampBody);
+  // Side plates
+  for(let ox of [-0.14,0.14]){
+    const cp=new THREE.Mesh(new THREE.BoxGeometry(0.025,0.2,0.14),clampMat);
+    cp.position.set(aX+ox,anchorH-0.14,aZ); anchorGroup.add(cp);
+  }
+  // Clamp bolts
+  for(let ox of [-0.1,0.1]) for(let oz of [-0.05,0.05]){
+    const bolt=new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.012,0.12,8),clampMat);
+    bolt.position.set(aX+ox,anchorH-0.18,aZ+oz); anchorGroup.add(bolt);
+    const nut=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,0.018,6),clampMat);
+    nut.position.set(aX+ox,anchorH-0.255,aZ+oz); anchorGroup.add(nut);
+  }
+  // Bracket (welded plate with eye)
+  const brktMat=new THREE.MeshStandardMaterial({color:0xc0b8a0,roughness:.2,metalness:.85});
+  const brkt=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.22,0.06),brktMat);
+  brkt.position.set(aX,anchorH-0.11,aZ+0.09); anchorGroup.add(brkt);
+  // Anchor eye D-ring at top of bracket
+  const eyeRing=new THREE.Mesh(new THREE.TorusGeometry(0.065,0.019,14,28),brktMat);
+  eyeRing.rotation.x=Math.PI/2;
+  eyeRing.position.set(aX,anchorH+0.058,aZ+0.09); anchorGroup.add(eyeRing);
+  const eyePin=new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.012,0.13,8),brktMat);
+  eyePin.rotation.z=Math.PI/2;
+  eyePin.position.set(aX,anchorH+0.058,aZ+0.09); anchorGroup.add(eyePin);
+  // Rated load label
+  const lblPlt=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.05,0.01),
+    new THREE.MeshStandardMaterial({color:0xffee00,roughness:.8,emissive:0x332200,emissiveIntensity:.2}));
+  lblPlt.position.set(aX,anchorH-0.06,aZ+0.125); anchorGroup.add(lblPlt);
+
+  // Glowing indicator sphere
+  const glowMat=new THREE.MeshStandardMaterial({color:0x00d4ff,emissive:0x00d4ff,emissiveIntensity:.55,transparent:true,opacity:.55});
+  const glow=new THREE.Mesh(new THREE.SphereGeometry(0.13,12,8),glowMat);
+  glow.position.set(aX,anchorH+0.06,aZ+0.09); anchorIndicator.add(glow);
+  // Pointer arrow
+  const arMat2=new THREE.MeshStandardMaterial({color:0x00d4ff,emissive:0x00d4ff,emissiveIntensity:.7});
+  const arSh=new THREE.Mesh(new THREE.CylinderGeometry(0.008,0.008,0.75,6),arMat2);
+  arSh.rotation.z=Math.PI/2; arSh.position.set(aX+0.52,anchorH+0.06,aZ+0.09); anchorIndicator.add(arSh);
+  const arHd=new THREE.Mesh(new THREE.ConeGeometry(0.028,0.055,8),arMat2);
+  arHd.rotation.z=-Math.PI/2; arHd.position.set(aX+0.14,anchorH+0.06,aZ+0.09); anchorIndicator.add(arHd);
+  const anchorLight=new THREE.PointLight(0x00d4ff,.45,5);
+  anchorLight.position.set(aX,anchorH+0.06,aZ+0.09); anchorIndicator.add(anchorLight);
+}
+
+// ═══════════════════════════════════════════════════════
+// EXTRA HARNESS MATERIALS
+// ═══════════════════════════════════════════════════════
+const strapBlkMat = new THREE.MeshStandardMaterial({color:0x0e151e,roughness:.85,metalness:.05});
+const dRingMat2   = new THREE.MeshStandardMaterial({color:0xe0d8c8,roughness:.12,metalness:.96});
+const snapMat2    = new THREE.MeshStandardMaterial({color:0xc0b8a8,roughness:.18,metalness:.92});
+const shockMat2   = new THREE.MeshStandardMaterial({color:0xdd7700,roughness:.55,emissive:0x331100,emissiveIntensity:.2});
+const srlHousMat  = new THREE.MeshStandardMaterial({color:0xdd3300,roughness:.4,metalness:.3});
+const labelWht    = new THREE.MeshStandardMaterial({color:0xfafafa,roughness:.9});
+const dRingGlow   = new THREE.MeshStandardMaterial({color:0x00d4ff,emissive:0x00d4ff,emissiveIntensity:.55,transparent:true,opacity:.65});
+
+// ═══════════════════════════════════════════════════════
+// WORKER — full body with complete PFAS harness detail
+// ═══════════════════════════════════════════════════════
+const workerGroup = new THREE.Group();
+scene.add(workerGroup);
+let dRingMesh = null;
+
+function mkStrap(w,h,d,mat,x,y,z,rx=0,ry=0,rz=0,parent=workerGroup){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
+  m.position.set(x,y,z); m.rotation.set(rx,ry,rz);
+  m.castShadow=true; parent.add(m); return m;
+}
+function mkStrapDiag(p1,p2,w,mat,parent=workerGroup){
+  const dir=p2.clone().sub(p1);
+  const len=dir.length();
+  const mid=p1.clone().add(p2).multiplyScalar(0.5);
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,len,w),mat);
+  m.position.copy(mid);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir.clone().normalize());
+  m.castShadow=true; parent.add(m); return m;
+}
+
+function buildWorker(){
+  while(workerGroup.children.length) workerGroup.remove(workerGroup.children[0]);
+  dRingMesh = null;
+
+  // ── BOOTS ──
+  for(let x of [-0.12,0.12]){
+    // Main boot body
+    const b=new THREE.Mesh(new THREE.BoxGeometry(0.2,0.17,0.29),bootMat);
+    b.position.set(x,0.085,0.02); b.castShadow=true; workerGroup.add(b);
+    // Steel toe cap
+    const toe=new THREE.Mesh(new THREE.BoxGeometry(0.19,0.11,0.09),
+      new THREE.MeshStandardMaterial({color:0x2a1808,roughness:.45,metalness:.5}));
+    toe.position.set(x,0.095,0.165); workerGroup.add(toe);
+    // Thick rubber sole
+    const sole=new THREE.Mesh(new THREE.BoxGeometry(0.22,0.045,0.31),
+      new THREE.MeshStandardMaterial({color:0x080606,roughness:.98}));
+    sole.position.set(x,0.022,0.02); workerGroup.add(sole);
+    // Laces
+    for(let ly=0.09;ly<=0.16;ly+=0.03){
+      const lace=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.01,0.01),labelWht);
+      lace.position.set(x,ly,0.15); workerGroup.add(lace);
+    }
+  }
+
+  // ── LEGS ──
+  for(let x of [-0.12,0.12]){
+    const ul=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.095,0.55,10),jeansMat);
+    ul.position.set(x,0.67,0); ul.castShadow=true; workerGroup.add(ul);
+    const ll=new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.085,0.36,10),jeansMat);
+    ll.position.set(x,0.24,0); ll.castShadow=true; workerGroup.add(ll);
+    // Pocket
+    const pkt=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.09,0.01),
+      new THREE.MeshStandardMaterial({color:0x163260,roughness:.9}));
+    pkt.position.set(x>0?x+0.06:x-0.06,0.65,-0.095); workerGroup.add(pkt);
+  }
+
+  // ── LEG LOOPS (harness) ──
+  for(let x of [-0.12,0.12]){
+    const side=x>0?1:-1;
+    // Front strap
+    mkStrap(0.055,0.07,0.23,strapBlkMat,x,0.73,0.01);
+    // Back strap
+    mkStrap(0.055,0.07,0.23,strapBlkMat,x,0.69,-0.01);
+    // Side connecting strap
+    mkStrapDiag(
+      new THREE.Vector3(x,0.72, 0.12),
+      new THREE.Vector3(x*1.55,0.67, 0.0),
+      0.05, strapBlkMat
+    );
+    // Adjuster buckle (side of thigh)
+    const bk=new THREE.Mesh(new THREE.BoxGeometry(0.055,0.055,0.055),snapMat2);
+    bk.position.set(x*1.58,0.68,0); workerGroup.add(bk);
+    // Buckle side plates
+    for(let ox of [-0.01,0.01]){
+      const bp=new THREE.Mesh(new THREE.BoxGeometry(0.01,0.06,0.07),dRingMat2);
+      bp.position.set(x*1.58+ox,0.68,0); workerGroup.add(bp);
+    }
+  }
+
+  // ── TORSO / VEST ──
+  const torso=new THREE.Mesh(new THREE.BoxGeometry(0.43,0.56,0.25),vestMat);
+  torso.position.set(0,1.16,0); torso.castShadow=true; workerGroup.add(torso);
+
+  // Hi-vis horizontal stripes (retroreflective tape)
+  const hvMat=new THREE.MeshStandardMaterial({color:0xffee00,emissive:0x443300,emissiveIntensity:.3,roughness:.4});
+  for(let y of [1.04,1.27]){
+    const s=new THREE.Mesh(new THREE.BoxGeometry(0.45,0.07,0.265),hvMat); s.position.set(0,y,0); workerGroup.add(s);
+  }
+  // Vertical hi-vis strips on back
+  for(let x of [-0.08,0.08]){
+    const sv=new THREE.Mesh(new THREE.BoxGeometry(0.06,0.5,0.01),hvMat); sv.position.set(x,1.16,-0.126); workerGroup.add(sv);
+  }
+
+  // ── FULL BODY HARNESS WEBBING ──
+
+  // === WAIST / SUB-PELVIC BELT ===
+  mkStrap(0.47,0.08,0.265,strapBlkMat, 0,0.935,0);
+  // Waist buckle (front)
+  {
+    const wb=new THREE.Group();
+    // Frame
+    const wbf=new THREE.Mesh(new THREE.BoxGeometry(0.07,0.07,0.035),snapMat2);
+    wb.add(wbf);
+    // Prong
+    const wp=new THREE.Mesh(new THREE.BoxGeometry(0.006,0.05,0.005),dRingMat2);
+    wp.position.set(0,0,0.02); wb.add(wp);
+    wb.position.set(0,0.935,0.148); workerGroup.add(wb);
+  }
+
+  // === SHOULDER STRAPS (front X-pattern / back parallel) ===
+  // Front: cross pattern from waist-hip → opposite shoulder
+  mkStrapDiag(
+    new THREE.Vector3(-0.15,0.96, 0.125),
+    new THREE.Vector3( 0.11,1.50, 0.124),
+    0.055, strapBlkMat
+  );
+  mkStrapDiag(
+    new THREE.Vector3( 0.15,0.96, 0.125),
+    new THREE.Vector3(-0.11,1.50, 0.124),
+    0.055, strapBlkMat
+  );
+  // Over-shoulder loops (top of shoulder)
+  for(let x of [-0.14,0.14]){
+    const loop=new THREE.Mesh(new THREE.TorusGeometry(0.055,0.022,8,14),strapBlkMat);
+    loop.position.set(x,1.54,0.0); loop.rotation.x=Math.PI/3;
+    workerGroup.add(loop);
+  }
+  // Back shoulder straps (parallel down the spine sides)
+  mkStrapDiag(
+    new THREE.Vector3(-0.14,1.50,-0.125),
+    new THREE.Vector3(-0.07,0.93,-0.125),
+    0.055, strapBlkMat
+  );
+  mkStrapDiag(
+    new THREE.Vector3( 0.14,1.50,-0.125),
+    new THREE.Vector3( 0.07,0.93,-0.125),
+    0.055, strapBlkMat
+  );
+
+  // === CHEST STRAP (horizontal, mid-sternum) ===
+  mkStrap(0.34,0.055,0.055, strapBlkMat, 0,1.28,0.127);
+  // Chest buckle (quick-release)
+  {
+    const cg=new THREE.Group();
+    const cf=new THREE.Mesh(new THREE.BoxGeometry(0.06,0.055,0.04),snapMat2); cg.add(cf);
+    const cpin=new THREE.Mesh(new THREE.CylinderGeometry(0.005,0.005,0.065,6),dRingMat2);
+    cpin.rotation.z=Math.PI/2; cg.add(cpin);
+    cg.position.set(0,1.28,0.15); workerGroup.add(cg);
+  }
+
+  // === SPINE STRAP (center back, vertical) ===
+  mkStrap(0.055,0.62,0.01, strapBlkMat, 0,1.18,-0.127);
+
+  // ─────────────────────────────────────────
+  // === DORSAL D-RING (most important part!) ===
+  // Large, chrome, prominently mounted at upper-back center
+  // between shoulder blades at ~1.52m from feet
+  // ─────────────────────────────────────────
+  const dg=new THREE.Group();
+  dg.position.set(0,1.52,-0.13);
+
+  // Backing plate (stitched to harness)
+  const dPlate=new THREE.Mesh(new THREE.BoxGeometry(0.14,0.1,0.022),strapBlkMat);
+  dPlate.position.set(0,0,0); dg.add(dPlate);
+  // Stitching marks
+  for(let oy of [-0.03,0.03]){
+    for(let ox=-0.05;ox<=0.05;ox+=0.02){
+      const st=new THREE.Mesh(new THREE.BoxGeometry(0.008,0.008,0.005),
+        new THREE.MeshStandardMaterial({color:0xcc8800,roughness:.9}));
+      st.position.set(ox,oy,-0.013); dg.add(st);
+    }
+  }
+
+  // D-ring main body (large, highly polished torus)
+  const dr=new THREE.Mesh(new THREE.TorusGeometry(0.096,0.021,14,28),dRingMat2);
+  dr.rotation.x=Math.PI/2; dr.position.set(0,0.06,-0.028);
+  dRingMesh=dr; dg.add(dr);
+
+  // D-ring cross pin (the straight part of the "D")
+  const dpin=new THREE.Mesh(new THREE.CylinderGeometry(0.013,0.013,0.192,10),dRingMat2);
+  dpin.rotation.z=Math.PI/2; dpin.position.set(0,0.06,-0.028); dg.add(dpin);
+
+  // Glow ring (highlights the D-ring in 3D view)
+  const dglw=new THREE.Mesh(new THREE.TorusGeometry(0.1,0.009,8,22),dRingGlow);
+  dglw.rotation.x=Math.PI/2; dglw.position.set(0,0.062,-0.03); dg.add(dglw);
+
+  // Retaining strap (holds D-ring to plate)
+  const ret=new THREE.Mesh(new THREE.BoxGeometry(0.12,0.038,0.018),strapBlkMat);
+  ret.position.set(0,-0.02,0); dg.add(ret);
+
+  // Glowing pointer arrow (so user always sees D-ring)
+  const arMat=new THREE.MeshStandardMaterial({color:0x00d4ff,emissive:0x00d4ff,emissiveIntensity:.7});
+  const arShaft=new THREE.Mesh(new THREE.CylinderGeometry(0.007,0.007,0.16,6),arMat);
+  arShaft.rotation.z=Math.PI/2; arShaft.position.set(-0.22,0.06,0.05); dg.add(arShaft);
+  const arHead=new THREE.Mesh(new THREE.ConeGeometry(0.025,0.045,8),arMat);
+  arHead.rotation.z=-Math.PI/2; arHead.position.set(-0.13,0.06,0.05); dg.add(arHead);
+  // "D-RING" text plate
+  const txtPlate=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.032,0.005),
+    new THREE.MeshStandardMaterial({color:0x00d4ff,emissive:0x00d4ff,emissiveIntensity:.4}));
+  txtPlate.position.set(-0.28,0.06,0.05); dg.add(txtPlate);
+
+  // Small point light at D-ring for emphasis
+  const dLight=new THREE.PointLight(0x00d4ff,0.25,1.2);
+  dLight.position.set(0,0.06,-0.03); dg.add(dLight);
+
+  workerGroup.add(dg);
+
+  // ── ARMS ──
+  for(let [x,rz,ry] of [[-0.30,Math.PI/11,0.12],[0.30,-Math.PI/11,-0.12]]){
+    const ua=new THREE.Mesh(new THREE.CylinderGeometry(0.076,0.07,0.3,9),vestMat);
+    ua.rotation.set(0,ry,rz); ua.position.set(x,1.22,0); ua.castShadow=true; workerGroup.add(ua);
+    const fa=new THREE.Mesh(new THREE.CylinderGeometry(0.062,0.055,0.28,9),
+      new THREE.MeshStandardMaterial({color:0xf0b060,roughness:.8}));
+    fa.rotation.set(0.2,ry,rz*.55); fa.position.set(x*1.04,0.98,0.05); workerGroup.add(fa);
+    const gl=new THREE.Mesh(new THREE.SphereGeometry(0.065,8,6),
+      new THREE.MeshStandardMaterial({color:0x223344,roughness:.7,metalness:.2}));
+    gl.position.set(x*1.07,0.85,0.06); workerGroup.add(gl);
+  }
+
+  // ── NECK ──
+  const neck=new THREE.Mesh(new THREE.CylinderGeometry(0.078,0.085,0.16,10),skinMat);
+  neck.position.set(0,1.53,0); workerGroup.add(neck);
+
+  // ── HEAD ──
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.195,14,10),skinMat);
+  head.position.set(0,1.785,0); head.castShadow=true; workerGroup.add(head);
+  // Brow ridge
+  const brow=new THREE.Mesh(new THREE.BoxGeometry(0.22,0.03,0.1),skinMat);
+  brow.position.set(0,1.82,0.16); brow.rotation.x=-0.15; workerGroup.add(brow);
+
+  // ── HARD HAT (detailed) ──
+  // Brim
+  const brim=new THREE.Mesh(new THREE.CylinderGeometry(0.255,0.25,0.028,22),helmetMat);
+  brim.position.set(0,1.915,0); workerGroup.add(brim);
+  // Shell dome
+  const shell=new THREE.Mesh(new THREE.SphereGeometry(0.215,16,9,0,Math.PI*2,0,Math.PI/2),helmetMat);
+  shell.position.set(0,1.915,0); shell.castShadow=true; workerGroup.add(shell);
+  // Suspension band (internal cradle visible at brim)
+  const susp=new THREE.Mesh(new THREE.TorusGeometry(0.195,0.01,6,22),
+    new THREE.MeshStandardMaterial({color:0xffaa00,roughness:.6}));
+  susp.position.set(0,1.918,0); workerGroup.add(susp);
+  // Vents
+  for(let a=0;a<4;a++){
+    const vg=new THREE.Mesh(new THREE.BoxGeometry(0.025,0.025,0.04),
+      new THREE.MeshStandardMaterial({color:0xffaa00,roughness:.6}));
+    vg.position.set(Math.sin(a*Math.PI/2)*0.19,1.97,Math.cos(a*Math.PI/2)*0.19);
+    workerGroup.add(vg);
+  }
+  // Safety label sticker
+  const sticker=new THREE.Mesh(new THREE.PlaneGeometry(0.09,0.05),
+    new THREE.MeshStandardMaterial({color:0xffffff,roughness:.9}));
+  sticker.position.set(0,1.945,0.21); sticker.rotation.x=-0.3; workerGroup.add(sticker);
+}
+buildWorker();
+
+// ═══════════════════════════════════════════════════════
+// LANYARD LINE (dynamic)
+// ═══════════════════════════════════════════════════════
+const lanyardGroup = new THREE.Group();
+scene.add(lanyardGroup);
+
+let lanyardLine = null;
+
+function updateLanyard(workerFeetY, anchorH, lanyardL) {
+  while(lanyardGroup.children.length) lanyardGroup.remove(lanyardGroup.children[0]);
+
+  // ── EXACT WORLD POSITIONS ──
+  const dRingWorld = new THREE.Vector3(
+    workerGroup.position.x,
+    workerFeetY + D_RING,
+    workerGroup.position.z - 0.14
+  );
+  const anchorEye = new THREE.Vector3(0.2, anchorH + 0.058, 1.89);
+
+  // ── SLAB EDGE: lanyard bends here when worker is outside ──
+  // Platform top surface at z=2.5 (front face of concrete slab)
+  const platformH = currentState ? currentState.platformH : workerFeetY;
+  const slabEdge  = new THREE.Vector3(0.2, platformH + 0.11, 2.52);
+  // Worker is 'outside' only when they've swung well past the edge
+  const workerOutside = workerGroup.position.z > 3.0;
+
+  // If outside: lanyard routes anchor → slabEdge → D-ring (bends at edge)
+  // If inside:  lanyard routes direct anchor → D-ring
+  let dist, isTaut, isOverExtended, toAnchor, toDring;
+
+  if(workerOutside){
+    // Lanyard wraps over the slab lip
+    const seg1 = anchorEye.distanceTo(slabEdge);
+    const seg2 = slabEdge.distanceTo(dRingWorld);
+    dist = seg1 + seg2;
+  } else {
+    dist = dRingWorld.distanceTo(anchorEye);
+  }
+
+  isTaut          = dist >= lanyardL * 0.88;
+  isOverExtended  = dist > lanyardL + 0.05;
+
+  const wbColor = isOverExtended ? 0xff3030 : (isTaut ? 0xff8800 : 0x22cc66);
+  const emCol   = isOverExtended ? 0x330000 : (isTaut ? 0x221100 : 0x002211);
+
+  // Direction for snap hooks (direct line, orientation only)
+  toAnchor = anchorEye.clone().sub(dRingWorld).normalize();
+  toDring  = toAnchor.clone().negate();
+
+  // ── SNAP HOOK geometry builder ──
+  // gate (clip end) placed AT connPt, body extends outToward lanyardward direction
+  // total hook length ~0.14m: gate 0 → +0.055, body 0.055 → 0.1, swivel 0.1 → 0.14
+  const snMat = new THREE.MeshStandardMaterial({color:0xd8d0bc,roughness:.13,metalness:.94});
+
+  function mkSnapHook(connPt, bodyDir) {
+    // bodyDir = direction from connPt toward lanyard (outward from connection)
+    const sg = new THREE.Group();
+
+    // ── Gate / nose (the part that clips onto D-ring or anchor eye) ──
+    // Placed AT connPt — a curved hook nose
+    const noseTorus = new THREE.Mesh(
+      new THREE.TorusGeometry(0.028, 0.013, 8, 14, Math.PI * 1.3),
+      snMat
+    );
+    // Torus is in XZ plane by default; rotate to align opening with connPt
+    noseTorus.rotation.x = Math.PI / 2;
+    noseTorus.position.set(0, 0, 0);
+    sg.add(noseTorus);
+
+    // Spring gate (thin bar closing the opening)
+    const gate = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.007, 0.007, 0.05, 6),
+      snMat
+    );
+    gate.rotation.z = Math.PI / 2;
+    gate.position.set(0.024, 0.005, 0);
+    sg.add(gate);
+
+    // ── Body (barrel) extending outward from hook ──
+    const barrel = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.017, 0.015, 0.055, 10),
+      snMat
+    );
+    barrel.position.set(0, 0.06, 0);
+    sg.add(barrel);
+
+    // Knurl / grip rings on barrel
+    for(let ri = 0; ri < 3; ri++){
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.018, 0.004, 6, 12),
+        snMat
+      );
+      ring.position.set(0, 0.038 + ri * 0.014, 0);
+      sg.add(ring);
+    }
+
+    // ── Swivel (connecting to lanyard webbing) ──
+    const swivel = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.014, 0.014, 0.038, 10),
+      new THREE.MeshStandardMaterial({color:0xb8b0a0,roughness:.2,metalness:.88})
+    );
+    swivel.position.set(0, 0.108, 0);
+    sg.add(swivel);
+
+    // Swivel eye (where lanyard attaches)
+    const swEye = new THREE.Mesh(
+      new THREE.TorusGeometry(0.016, 0.008, 6, 12),
+      snMat
+    );
+    swEye.position.set(0, 0.128, 0);
+    sg.add(swEye);
+
+    // ── Position & orient: gate at connPt, body pointing bodyDir ──
+    sg.position.copy(connPt);
+    sg.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bodyDir.clone().normalize());
+    lanyardGroup.add(sg);
+
+    // Return swivel tip world position (where lanyard starts/ends)
+    const swivelTip = connPt.clone().add(bodyDir.clone().multiplyScalar(0.136));
+    return swivelTip;
+  }
+
+  // Place snap hooks AT the physical connection points
+  const lanyardStartPt = mkSnapHook(dRingWorld, toAnchor);
+  const lanyardEndPt   = mkSnapHook(anchorEye,  toDring);
+
+  // ── EDGE GUIDE ROLLER: concrete lip abrasion guard ──
+  if(workerOutside){
+    // Small chrome roller at slab edge (lanyard rides over this)
+    const rollerMat=new THREE.MeshStandardMaterial({color:0xd0c8b0,roughness:.15,metalness:.92});
+    const roller=new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,0.12,10),rollerMat);
+    roller.rotation.z=Math.PI/2;
+    roller.position.copy(slabEdge);
+    lanyardGroup.add(roller);
+    // Concrete wear marks
+    const wearMat=new THREE.MeshStandardMaterial({color:0x6a7a84,roughness:.95});
+    const wear=new THREE.Mesh(new THREE.BoxGeometry(0.14,0.03,0.04),wearMat);
+    wear.position.copy(slabEdge.clone().add(new THREE.Vector3(0,-0.04,0)));
+    lanyardGroup.add(wear);
+  }
+
+  // Helper: draw a webbing segment between two points
+  function drawWebSeg(pA, pB, radius, mat){
+    const d=pB.clone().sub(pA);
+    const l=d.length();
+    if(l<0.01) return;
+    const m=pA.clone().add(pB).multiplyScalar(0.5);
+    const mesh=new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,l,8),mat);
+    mesh.position.copy(m);
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.clone().normalize());
+    lanyardGroup.add(mesh);
+  }
+
+  // ── LANYARD between the two swivel tips ──
+  const lanyardType = parseFloat(document.querySelector('input[name="lanyard"]:checked').value);
+  const lDir2  = lanyardEndPt.clone().sub(lanyardStartPt).normalize();
+  const webLen = lanyardStartPt.distanceTo(lanyardEndPt);
+  const webMid = lanyardStartPt.clone().add(lanyardEndPt).multiplyScalar(0.5);
+
+  if(lanyardType >= 1.8){
+    // ── STANDARD LANYARD with SHOCK ABSORBER PACK ──
+    const wbMat = new THREE.MeshStandardMaterial({
+      color: wbColor, roughness:.55, emissive: emCol, emissiveIntensity:.25
+    });
+
+    if(webLen > 0.01){
+      // Shock absorber occupies top ~30% of the lanyard (near D-ring end)
+      const shockFrac = Math.min(0.32, 0.32);
+      const shockLen  = Math.min(webLen * shockFrac, 0.28);
+      const plainLen  = Math.max(webLen - shockLen, 0.01);
+
+      // Plain webbing section (lower, anchor side)
+      const shockEndPt = lanyardStartPt.clone().add(lDir2.clone().multiplyScalar(shockLen));
+      // Route webbing through slab edge if worker is outside
+      if(workerOutside){
+        // Segment from shock-pack end to slab edge
+        drawWebSeg(shockEndPt, slabEdge, 0.016, wbMat);
+        // Segment from slab edge to anchor
+        drawWebSeg(slabEdge, lanyardEndPt, 0.016, wbMat);
+      } else {
+        drawWebSeg(shockEndPt, lanyardEndPt, 0.016, wbMat);
+      }
+
+      // Shock absorber pack (orange padded pack at D-ring end)
+      // Shock pack is always near the D-ring side (worker's body)
+      // Direction from D-ring toward slab edge when outside, else toward anchor
+      const shockDir2 = workerOutside
+        ? slabEdge.clone().sub(lanyardStartPt).normalize()
+        : lDir2.clone();
+      const shkStart = lanyardStartPt.clone();
+      const shkEnd   = lanyardStartPt.clone().add(shockDir2.clone().multiplyScalar(shockLen));
+      const shkMid   = shkStart.clone().add(shkEnd).multiplyScalar(0.5);
+      const shkDir   = shkEnd.clone().sub(shkStart);
+      const shkMat2  = new THREE.MeshStandardMaterial({
+        color:0xee6600, roughness:.5, emissive:0x221100, emissiveIntensity:.2
+      });
+      // Pack body
+      const pack=new THREE.Mesh(new THREE.BoxGeometry(0.058,shockLen,0.038),shkMat2);
+      pack.position.copy(shkMid);
+      pack.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),shkDir.clone().normalize());
+      lanyardGroup.add(pack);
+      // Stitching tear-out strips
+      for(let si=0;si<4;si++){
+        const f=si/3;
+        const stPos=shkStart.clone().lerp(shkEnd,f);
+        const stLine=new THREE.Mesh(new THREE.BoxGeometry(0.062,0.007,0.042),
+          new THREE.MeshStandardMaterial({color:0xcc4400,roughness:.8}));
+        stLine.position.copy(stPos);
+        stLine.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),shkDir.clone().normalize());
+        lanyardGroup.add(stLine);
+      }
+      // White label on pack
+      const lbl=new THREE.Mesh(new THREE.PlaneGeometry(0.05,0.022),
+        new THREE.MeshStandardMaterial({color:0xfafafa,roughness:.9}));
+      // Orient label perpendicular to pack face
+      lbl.position.copy(shkMid.clone().add(new THREE.Vector3(0.032,0,0)));
+      lanyardGroup.add(lbl);
+    }
+
+  } else if(lanyardType >= 1.2){
+    // ── SHORT LANYARD — flat webbing, no shock absorber ──
+    const wbMat = new THREE.MeshStandardMaterial({
+      color:wbColor, roughness:.5, emissive:emCol, emissiveIntensity:.25
+    });
+    if(workerOutside){
+      // Route: D-ring → slabEdge, then slabEdge → anchor
+      drawWebSeg(lanyardStartPt, slabEdge, 0.016, wbMat);
+      drawWebSeg(slabEdge, lanyardEndPt, 0.016, wbMat);
+    } else if(webLen > 0.01){
+      drawWebSeg(lanyardStartPt, lanyardEndPt, 0.016, wbMat);
+    }
+    // Sleeve labels
+    for(let t of [0.3,0.7]){
+      const slPos=lanyardStartPt.clone().lerp(workerOutside?slabEdge:lanyardEndPt,t);
+      const sl=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,0.032,8),
+        new THREE.MeshStandardMaterial({color:0xffdd00,roughness:.6}));
+      const segDir=(workerOutside?slabEdge:lanyardEndPt).clone().sub(lanyardStartPt).normalize();
+      sl.position.copy(slPos);
+      sl.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),segDir);
+      lanyardGroup.add(sl);
+    }
+
+  } else {
+    // ── SRL — stainless cable from housing ──
+    // Housing mounted at anchor eye, cable runs to D-ring
+    const srlHousMat2 = new THREE.MeshStandardMaterial({color:0xcc2200,roughness:.38,metalness:.35});
+    // Housing body (cylinder just below anchorEye)
+    const srlBody=new THREE.Mesh(new THREE.CylinderGeometry(0.075,0.075,0.13,14),srlHousMat2);
+    srlBody.position.copy(anchorEye.clone().add(toDring.clone().multiplyScalar(0.13)));
+    lanyardGroup.add(srlBody);
+    const srlCap=new THREE.Mesh(new THREE.SphereGeometry(0.075,12,7,0,Math.PI*2,0,Math.PI/2),srlHousMat2);
+    srlCap.rotation.x=Math.PI;
+    srlCap.position.copy(anchorEye.clone().add(toDring.clone().multiplyScalar(0.065)));
+    lanyardGroup.add(srlCap);
+    // Label
+    const srlLbl=new THREE.Mesh(new THREE.CylinderGeometry(0.076,0.076,0.04,14),
+      new THREE.MeshStandardMaterial({color:0xfafafa,roughness:.9}));
+    srlLbl.position.copy(anchorEye.clone().add(toDring.clone().multiplyScalar(0.13)));
+    lanyardGroup.add(srlLbl);
+
+    // Stainless cable from housing bottom to D-ring
+    const cableMat=new THREE.MeshStandardMaterial({color:0xc8c0b0,roughness:.18,metalness:.92});
+    const cableStart=anchorEye.clone().add(toDring.clone().multiplyScalar(0.195));
+    const cableEnd  =dRingWorld.clone().add(toAnchor.clone().multiplyScalar(0.136));
+    if(workerOutside){
+      // SRL cable routes: housing → slabEdge → D-ring
+      drawWebSeg(cableStart, slabEdge, 0.007, cableMat);
+      drawWebSeg(slabEdge,  cableEnd,  0.007, cableMat);
+    } else {
+      drawWebSeg(cableStart, cableEnd, 0.007, cableMat);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// FALL ZONES (dynamic transparent boxes)
+// ═══════════════════════════════════════════════════════
+const zoneGroup = new THREE.Group();
+scene.add(zoneGroup);
+let zonesVisible = true;
+
+function makeZone(color, opacity, w, h, d, x, y, z) {
+  const geo = new THREE.BoxGeometry(w,h,d);
+  const mat = new THREE.MeshBasicMaterial({
+    color, transparent:true, opacity,
+    side:THREE.DoubleSide, depthWrite:false
+  });
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x,y,z);
+  zoneGroup.add(m);
+  // Wireframe outline
+  const wfMat=new THREE.MeshBasicMaterial({color,wireframe:true,transparent:true,opacity:opacity*1.5});
+  const wf=new THREE.Mesh(geo,wfMat);
+  m.add(wf);
+  return m;
+}
+
+// ═══════════════════════════════════════════════════════
+// DIMENSION ANNOTATIONS (HTML overlays)
+// ═══════════════════════════════════════════════════════
+const dimGroup = new THREE.Group();
+scene.add(dimGroup);
+let dimsVisible = true;
+
+function mkDimLine(y1, y2, color, x=6.5) {
+  const pts = [
+    new THREE.Vector3(x, y1, 0),
+    new THREE.Vector3(x, y2, 0)
+  ];
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const mat = new THREE.LineBasicMaterial({color, linewidth:1.5});
+  const line = new THREE.Line(geo, mat);
+  dimGroup.add(line);
+
+  // Tick marks
+  for(let y of [y1, y2]){
+    const tick=[new THREE.Vector3(x-0.15,y,0),new THREE.Vector3(x+0.15,y,0)];
+    const tg=new THREE.BufferGeometry().setFromPoints(tick);
+    const tl=new THREE.Line(tg,mat);
+    dimGroup.add(tl);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// CALCULATION ENGINE
+// ═══════════════════════════════════════════════════════
+function calcFall(platformH, anchorH, lanyardL) {
+  const dRingH    = platformH + D_RING;
+  // Optimal anchor = dRingH + lanyardL → exactly zero free fall
+  // Above optimal: lanyard too short to span gap → CANNOT CONNECT
+  // Below D-ring:  anchor lower than D-ring → extremely dangerous
+  const optimalAnchor = dRingH + lanyardL;
+  const gapAboveDring = anchorH - dRingH;
+
+  let freeFall;
+  if (anchorH > optimalAnchor + 0.01) {
+    // Anchor above optimal: gap > lanyardL → cannot connect → treat as max danger
+    // This shouldn't happen if slider is clamped, but guard anyway
+    freeFall = 0; // effectively connected at optimal
+  } else if (gapAboveDring >= lanyardL) {
+    // Exactly at optimal or just above → zero free fall (safest connected state)
+    freeFall = 0;
+  } else if (gapAboveDring > 0) {
+    // Anchor between D-ring and optimal → partial free fall
+    freeFall = lanyardL - gapAboveDring;
+  } else {
+    // Anchor at or below D-ring level → very dangerous, max free fall
+    freeFall = lanyardL + Math.abs(gapAboveDring);
+  }
+
+  // OSHA Appendix C: total arrest distance = free fall + decel + harness elongation
+  // Clearance needed: total arrest + safety margin
+  const totalArrest  = freeFall + DECEL + STRETCH;
+  const reqClearance = totalArrest + SAFETY_MARG;
+  // Feet lowest point = platform - totalArrest
+  const feetFinal    = platformH - totalArrest;
+  // Actual clearance = feet lowest point - ground (must be > 0 with safety margin)
+  const clearance    = feetFinal - SAFETY_MARG;
+
+  const oshaFF   = freeFall <= OSHA_MAX_FF;
+  const anchorOK = anchorH >= platformH;
+  const clearOK  = clearance > 0;  // feet clear ground + safety margin
+
+  return { freeFall, totalArrest, reqClearance, feetFinal, clearance,
+           oshaFF, anchorOK, clearOK, safe: oshaFF && anchorOK && clearOK };
+}
+
+// ═══════════════════════════════════════════════════════
+// MAIN UPDATE — called on every slider change
+// ═══════════════════════════════════════════════════════
+let currentState = {};
+
+// ── RECOMMENDED ANCHOR HEIGHT per lanyard type ──
+// For zero free fall: anchor must be at least D-ring + lanyardL above GROUND
+// D-ring is at platformH + D_RING (1.4m above worker's feet)
+// So min anchor = platformH + D_RING + lanyardL
+//
+// OPTIMAL ANCHOR = exact zero free fall point
+// = platformH + D_RING + lanyardL
+// This is ALSO the MAXIMUM useful anchor height (above this → can't connect)
+// SHORTER lanyard (SRL 0.6m) → LOWER optimal anchor (H-beam closer to worker)
+// LONGER lanyard (1.8m)      → HIGHER optimal anchor (H-beam further above)
+// OSHA 1926.502(d): anchor ≥ 5,000 lbs per worker OR designed by PE
+function calcMinAnchor(platformH, lanyardL) {
+  return platformH + D_RING + lanyardL;
+}
+
+// Required clearance below platform for each lanyard type
+function calcRequiredClearance(lanyardL) {
+  // OSHA Appendix C: worst case free fall + decel + harness + safety margin
+  // worst case: anchor at D-ring level → freeFall = lanyardL (full rope pays)
+  return lanyardL + DECEL + STRETCH + SAFETY_MARG;
+}
+
+function drawMinAnchorLine(platformH, minAnchorH, lanyardL) {
+  while(minAnchorGroup.children.length) minAnchorGroup.remove(minAnchorGroup.children[0]);
+
+  const lineColor = lanyardL >= 1.8 ? 0xff8800 :
+                    lanyardL >= 1.2 ? 0xffdd00 : 0x00ddff;
+
+  // Horizontal dashed line at min anchor height
+  for(let x = -4; x <= 7; x += 0.4){
+    const seg = new THREE.Mesh(
+      new THREE.BoxGeometry(0.18, 0.025, 0.025),
+      new THREE.MeshBasicMaterial({color: lineColor})
+    );
+    seg.position.set(x, minAnchorH, -1.0);
+    minAnchorGroup.add(seg);
+  }
+
+  // Label sphere at right end
+  const dot = new THREE.Mesh(
+    new THREE.SphereGeometry(0.1, 10, 8),
+    new THREE.MeshStandardMaterial({color: lineColor, emissive: lineColor, emissiveIntensity: 0.5})
+  );
+  dot.position.set(6.2, minAnchorH, -1.0);
+  minAnchorGroup.add(dot);
+
+  // Vertical span line: platform → minAnchor
+  const spanH = minAnchorH - platformH;
+  if(spanH > 0.1){
+    const span = new THREE.Mesh(
+      new THREE.BoxGeometry(0.015, spanH, 0.015),
+      new THREE.MeshBasicMaterial({color: lineColor})
+    );
+    span.position.set(6.2, platformH + spanH/2, -1.0);
+    minAnchorGroup.add(span);
+    // Tick at top
+    const tickT = new THREE.Mesh(new THREE.BoxGeometry(0.25,0.025,0.025),
+      new THREE.MeshBasicMaterial({color:lineColor}));
+    tickT.position.set(6.2, minAnchorH, -1.0); minAnchorGroup.add(tickT);
+    // Tick at bottom
+    const tickB = new THREE.Mesh(new THREE.BoxGeometry(0.25,0.025,0.025),
+      new THREE.MeshBasicMaterial({color:lineColor}));
+    tickB.position.set(6.2, platformH, -1.0); minAnchorGroup.add(tickB);
+  }
+}
+
+function updateAll() {
+  const platformH = parseFloat(document.getElementById('sl-platform').value);
+  const lanyardL  = parseFloat(document.querySelector('input[name="lanyard"]:checked').value);
+
+  // Optimal anchor = exact zero-free-fall = MAX useful height
+  // Slider is clamped: min = platformH (dangerously low), max = optimalAnchor
+  const minAnchorH = calcMinAnchor(platformH, lanyardL);  // = optimal = max useful
+  const anchorSlider = document.getElementById('sl-anchor');
+  anchorSlider.min = platformH.toFixed(1);
+  anchorSlider.max = minAnchorH.toFixed(1);
+  // Clamp current value within new range
+  const anchorH = Math.min(Math.max(parseFloat(anchorSlider.value), platformH), minAnchorH);
+  anchorSlider.value = anchorH.toFixed(1);
+  const reqClear   = calcRequiredClearance(lanyardL);
+
+  const R = calcFall(platformH, anchorH, lanyardL);
+  currentState = { platformH, anchorH, lanyardL, R, minAnchorH, reqClear };
+
+  // Draw minimum anchor recommendation line
+  drawMinAnchorLine(platformH, minAnchorH, lanyardL);
+
+  // Build geometry
+  if (!isSimulating) {
+    workerGroup.position.set(0.2, platformH, 2.4);
+  }
+  buildPlatform(platformH);
+  buildAnchorStructure(platformH, anchorH);
+
+  // Lanyard
+  const workerFeetY = isSimulating ? workerGroup.position.y : platformH;
+  updateLanyard(workerFeetY, anchorH, lanyardL);
+
+  // Zones
+  while(zoneGroup.children.length) zoneGroup.remove(zoneGroup.children[0]);
+
+  const ZX = -2.5, ZW = 3.2, ZD = 0.4;
+
+  // Free fall zone
+  if(R.freeFall > 0.01){
+    const ffTop = platformH;
+    const ffBot = platformH - R.freeFall;
+    const ffMid = (ffTop+ffBot)/2;
+    makeZone(0xff2030, 0.22, ZW, R.freeFall, ZD, ZX, ffMid, 0);
+  }
+
+  // Deceleration zone
+  const decTop = platformH - R.freeFall;
+  const decBot = decTop - DECEL;
+  const decMid = (decTop+decBot)/2;
+  makeZone(0xff9500, 0.22, ZW, DECEL, ZD, ZX, decMid, 0);
+
+  // Stretch zone
+  const strTop = decBot;
+  const strBot = strTop - STRETCH;
+  const strMid = (strTop+strBot)/2;
+  makeZone(0xffe030, 0.22, ZW, STRETCH, ZD, ZX, strMid, 0);
+
+  // Clearance zone
+  if(R.feetFinal > 0.02){
+    const clrMid = R.feetFinal / 2;
+    makeZone(R.clearOK ? 0x00ff88 : 0xff2030, R.clearOK ? 0.12 : 0.25, ZW, R.feetFinal, ZD, ZX, clrMid, 0);
+  } else if(R.feetFinal <= 0) {
+    // Ground impact!
+    makeZone(0xff2030, 0.35, ZW+1, 0.3, ZD, ZX, 0.15, 0);
+  }
+
+  zoneGroup.visible = zonesVisible;
+
+  // Dimension lines
+  while(dimGroup.children.length) dimGroup.remove(dimGroup.children[0]);
+  mkDimLine(0, platformH, 0x4488aa, 5.5);             // platform height
+  mkDimLine(platformH, anchorH, 0x00d4ff, 5.5);        // anchor above platform
+  mkDimLine(platformH, R.feetFinal > 0 ? R.feetFinal : 0, R.clearOK ? 0x00ff88 : 0xff2030, 4.5);
+  dimGroup.visible = dimsVisible;
+
+  // Impact marker
+  if(!R.clearOK && R.feetFinal < 0){
+    const impactMat=new THREE.MeshStandardMaterial({color:0xff2030,emissive:0xff2030,emissiveIntensity:0.8});
+    const impact=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,0.08,16),impactMat);
+    impact.position.set(0.2,0.04,1.8); zoneGroup.add(impact);
+  }
+
+  // ── HUD UPDATES ──
+  document.getElementById('v-platform').textContent = platformH.toFixed(1)+'m';
+  document.getElementById('v-anchor').textContent   = anchorH.toFixed(1)+'m';
+
+  const ffEl = document.getElementById('s-freefall');
+  ffEl.textContent = R.freeFall.toFixed(2)+'m';
+  ffEl.className   = 'stat-val ' + (R.oshaFF ? (R.freeFall>1.4?'warn':'') : 'danger');
+
+  const totEl = document.getElementById('s-total');
+  totEl.textContent = R.totalArrest.toFixed(2)+'m';
+  totEl.className   = 'stat-val';
+
+  const clrEl = document.getElementById('s-clear');
+  clrEl.textContent = R.clearance.toFixed(2)+'m';
+  clrEl.className   = 'stat-val ' + (R.clearOK ? (R.clearance<0.5?'warn':'safe') : 'danger');
+
+  const stEl = document.getElementById('s-status');
+  stEl.textContent = R.safe ? 'SAFE ✓' : 'DANGER ✗';
+  stEl.className   = 'stat-val ' + (R.safe ? 'safe' : 'danger');
+
+  // Left calc panel
+  document.getElementById('c-platform').textContent = platformH.toFixed(1)+'m';
+  document.getElementById('c-anchor').textContent   = anchorH.toFixed(1)+'m';
+  document.getElementById('c-lanyard').textContent  = lanyardL.toFixed(1)+'m';
+
+  const ffCalcEl = document.getElementById('c-freefall');
+  ffCalcEl.textContent = R.freeFall.toFixed(2)+'m';
+  ffCalcEl.className   = 'calc-num' + (R.oshaFF ? (R.freeFall>1.4?' warn':'') : ' danger');
+
+  // Min anchor height for this lanyard
+  const minAEl = document.getElementById('c-minanchor');
+  minAEl.textContent = minAnchorH.toFixed(2)+'m';
+  minAEl.className   = anchorH >= minAnchorH ? 'calc-num safe' : 'calc-num warn';
+
+  // Required clearance (worst case = zero free fall scenario)
+  const reqEl = document.getElementById('c-required');
+  reqEl.textContent = reqClear.toFixed(2)+'m';
+  reqEl.className   = R.clearOK ? 'calc-num safe' : 'calc-num danger';
+
+  const actEl = document.getElementById('c-actual');
+  actEl.textContent = R.clearance.toFixed(2)+'m';
+  actEl.className   = 'calc-num ' + (R.clearOK ? 'safe' : 'danger');
+
+  // PFAS spec text
+  const pfasEl = document.getElementById('pfas-specs');
+  if(pfasEl){
+    const specs = lanyardL >= 1.8 ? [
+      'Type: Shock-absorbing lanyard',
+      'Length: 1.83m (6 ft)',
+      'Width: 44mm webbing',
+      'Strength: 22.2 kN (5,000 lbf)',
+      'Decel dist: ≤1.07m (ANSI)',
+      'Free fall: ≤1.8m (OSHA)',
+      'Snap hook: 23 kN gate',
+      'Std: ANSI Z359.13-2013',
+    ] : lanyardL >= 1.2 ? [
+      'Type: Short positioning lanyard',
+      'Length: 1.22m (4 ft)',
+      'Width: 44mm webbing',
+      'Strength: 22.2 kN (5,000 lbf)',
+      'Decel dist: ≤1.07m (ANSI)',
+      'Free fall: ≤0.6m typical',
+      'Snap hook: 23 kN gate',
+      'Std: ANSI Z359.13-2013',
+    ] : [
+      'Type: Self-Retracting Lifeline',
+      'Cable: Ø3.2mm stainless wire',
+      'Capacity: up to 140 kg',
+      'Strength: 22.2 kN (5,000 lbf)',
+      'Arrest dist: ≤0.6m (ANSI)',
+      'Response: ≤0.3s braking',
+      'Swivel: 360° rotation',
+      'Std: ANSI Z359.14-2014',
+    ];
+    pfasEl.innerHTML = specs.join('<br>');
+  }
+
+  // Status badge
+  const badge = document.getElementById('status-badge');
+  if(!R.safe){
+    badge.className='show '+(!R.clearOK?'danger-mode':'danger-mode');
+    document.getElementById('badge-main').textContent =
+      !R.clearOK ? '⚠ GROUND IMPACT' :
+      !R.oshaFF  ? '⚠ EXCESS FREE FALL' :
+                   '⚠ ANCHOR TOO LOW';
+    document.getElementById('badge-sub').textContent =
+      !R.clearOK ? `Worker hits ground — ${Math.abs(R.clearance).toFixed(2)}m below grade` :
+      !R.oshaFF  ? `Free fall ${R.freeFall.toFixed(2)}m exceeds OSHA 6ft (1.8m) limit` :
+                   'Anchor point below working level — non-compliant';
+    clearTimeout(window._badgeTimer);
+    window._badgeTimer = setTimeout(()=>badge.className='',4000);
+  } else {
+    badge.className='';
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// FALL SIMULATION
+// ═══════════════════════════════════════════════════════
+let isSimulating = false;
+let simPhase = 0, simT = 0;
+let simStartY, simFreeFallEnd, simDecelEnd, simFinalY;
+
+// Simulation state
+let simStartZ  = 2.4;   // start at front edge of slab
+let simFinalZ  = 2.8;   // final hang position (outside building)
+let simStartRot= 0;     // body rotation at start
+
+function startFallSim(){
+  if(isSimulating) {
+    isSimulating=false;
+    workerGroup.position.set(0.2, currentState.platformH, 2.4);
+    workerGroup.rotation.set(0,0,0);
+    updateAll();
+    document.getElementById('btn-sim').textContent='▶ SIMULATE FALL';
+    return;
+  }
+  if(!currentState.platformH) return;
+  const {platformH, anchorH, lanyardL, R} = currentState;
+
+  isSimulating   = true;
+  simPhase       = 1;
+  simT           = 0;
+  simStartY      = platformH;
+  simFreeFallEnd = platformH - R.freeFall;
+  simDecelEnd    = simFreeFallEnd - DECEL - STRETCH;
+  simFinalY      = Math.max(simDecelEnd, 0.05);
+  simStartZ      = 2.4;   // front edge of concrete slab (z=2.5 is edge)
+  simFinalZ      = 3.1;   // hangs OUTSIDE building
+
+  // Place worker at slab edge, upright
+  workerGroup.position.set(0.2, simStartY, simStartZ);
+  workerGroup.rotation.set(0,0,0);
+
+  document.getElementById('btn-sim').textContent='⏹ STOP';
+  setView('side');
+}
+
+// ═══════════════════════════════════════════════════════
+// CAMERA CONTROLS
+// ═══════════════════════════════════════════════════════
+let isDragging=false, lastMX=0, lastMY=0;
+let orbitTheta=0.6, orbitPhi=0.38, orbitR=18;
+let orbitTarget=new THREE.Vector3(0,5,0);
+let currentView='orbit';
+let lerpCam=false;
+let targetPos=new THREE.Vector3(), targetLook=new THREE.Vector3();
+
+function setView(v){
+  document.querySelectorAll('.btn').forEach(b=>b.classList.remove('active'));
+  currentView=v; lerpCam=true;
+  switch(v){
+    case 'orbit':
+      document.getElementById('btn-orbit').classList.add('active');
+      lerpCam=false;
+      camera.position.set(12,8,14); camera.lookAt(0,5,0);
+      break;
+    case 'side':
+      document.getElementById('btn-side').classList.add('active');
+      targetPos.set(-16,6,1); targetLook.set(0,6,1);
+      break;
+    case 'front':
+      document.getElementById('btn-front').classList.add('active');
+      targetPos.set(0,6,16); targetLook.set(0,6,0);
+      break;
+    case 'top':
+      document.getElementById('btn-top').classList.add('active');
+      targetPos.set(0,22,0.1); targetLook.set(0,0,0);
+      break;
+  }
+  document.getElementById('btn-sim').classList.remove('active');
+}
+
+function toggleZones(){
+  zonesVisible=!zonesVisible;
+  zoneGroup.visible=zonesVisible;
+  document.getElementById('btn-zones').classList.toggle('active',zonesVisible);
+}
+function toggleDims(){
+  dimsVisible=!dimsVisible;
+  dimGroup.visible=dimsVisible;
+  document.getElementById('btn-dims').classList.toggle('active',dimsVisible);
+}
+
+renderer.domElement.addEventListener('mousedown',e=>{
+  if(currentView!=='orbit')return;
+  isDragging=true; lastMX=e.clientX; lastMY=e.clientY;
+});
+renderer.domElement.addEventListener('mousemove',e=>{
+  if(!isDragging||currentView!=='orbit')return;
+  orbitTheta-=(e.clientX-lastMX)*.007;
+  orbitPhi=Math.max(.08,Math.min(Math.PI/2-.05,orbitPhi-(e.clientY-lastMY)*.005));
+  lastMX=e.clientX; lastMY=e.clientY;
+});
+renderer.domElement.addEventListener('mouseup',()=>isDragging=false);
+renderer.domElement.addEventListener('mouseleave',()=>isDragging=false);
+renderer.domElement.addEventListener('wheel',e=>{
+  if(currentView!=='orbit')return;
+  orbitR=Math.max(4,Math.min(40,orbitR+e.deltaY*.02));
+});
+
+// Touch
+let lastTD=0;
+renderer.domElement.addEventListener('touchstart',e=>{
+  if(e.touches.length===1&&currentView==='orbit'){isDragging=true;lastMX=e.touches[0].clientX;lastMY=e.touches[0].clientY;}
+  if(e.touches.length===2) lastTD=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+});
+renderer.domElement.addEventListener('touchmove',e=>{
+  if(e.touches.length===1&&isDragging&&currentView==='orbit'){
+    orbitTheta-=(e.touches[0].clientX-lastMX)*.009;
+    orbitPhi=Math.max(.08,Math.min(Math.PI/2-.05,orbitPhi-(e.touches[0].clientY-lastMY)*.007));
+    lastMX=e.touches[0].clientX; lastMY=e.touches[0].clientY;
+  }
+  if(e.touches.length===2){const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);orbitR=Math.max(4,Math.min(40,orbitR-(d-lastTD)*.04));lastTD=d;}
+  e.preventDefault();
+},{passive:false});
+renderer.domElement.addEventListener('touchend',()=>isDragging=false);
+
+// ═══════════════════════════════════════════════════════
+// SLIDER EVENTS
+// ═══════════════════════════════════════════════════════
+['sl-platform','sl-anchor'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',()=>{
+    if(!isSimulating){
+      // When platform changes, re-check if anchor is still above minimum
+      if(id === 'sl-platform'){
+        const pH = parseFloat(document.getElementById('sl-platform').value);
+        const lL = parseFloat(document.querySelector('input[name="lanyard"]:checked').value);
+        const minA = calcMinAnchor(pH, lL);
+        const anchorSlider = document.getElementById('sl-anchor');
+        // Recalculate optimal anchor for new platform height
+        anchorSlider.min = pH.toFixed(1);
+        anchorSlider.max = minA.toFixed(1);
+        // Preserve relative position within new range
+        const curRatio = (parseFloat(anchorSlider.value) - parseFloat(anchorSlider.min))
+                       / Math.max(parseFloat(anchorSlider.max) - parseFloat(anchorSlider.min), 0.1);
+        anchorSlider.value = minA.toFixed(1);  // reset to optimal on platform change
+        document.getElementById('v-anchor').textContent = minA.toFixed(1)+'m';
+      }
+      updateAll();
+    }
+  });
+});
+document.querySelectorAll('input[name="lanyard"]').forEach(r=>{
+  r.addEventListener('change',()=>{
+    if(!isSimulating){
+      // Lanyard changed → snap anchor to OPTIMAL (= max useful = zero free fall)
+      // SRL 0.6m  → H-beam comes DOWN (only needs 0.6m above D-ring)
+      // Std 1.8m  → H-beam goes UP (needs 1.8m above D-ring)
+      const pH = parseFloat(document.getElementById('sl-platform').value);
+      const lL = parseFloat(document.querySelector('input[name="lanyard"]:checked').value);
+      const optA = calcMinAnchor(pH, lL);
+      const anchorSlider = document.getElementById('sl-anchor');
+      anchorSlider.min = pH.toFixed(1);
+      anchorSlider.max = optA.toFixed(1);
+      anchorSlider.value = optA.toFixed(1);  // start at optimal (zero free fall)
+      document.getElementById('v-anchor').textContent = optA.toFixed(1)+'m';
+      updateAll();
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// ANIMATION LOOP
+// ═══════════════════════════════════════════════════════
+const clock = new THREE.Clock();
+let glowT=0;
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+  glowT += dt;
+
+  // Orbit
+  if(currentView==='orbit'){
+    const x=orbitR*Math.sin(orbitPhi)*Math.sin(orbitTheta);
+    const y=orbitR*Math.cos(orbitPhi);
+    const z=orbitR*Math.sin(orbitPhi)*Math.cos(orbitTheta);
+    camera.position.set(x+orbitTarget.x,y+orbitTarget.y,z+orbitTarget.z);
+    camera.lookAt(orbitTarget);
+  }
+  if(lerpCam && currentView!=='orbit'){
+    camera.position.lerp(targetPos,.06);
+    const d=new THREE.Vector3();camera.getWorldDirection(d);
+    const des=targetLook.clone().sub(camera.position).normalize();
+    camera.lookAt(camera.position.clone().add(d.lerp(des,.06).normalize()));
+  }
+
+  // Anchor glow pulse
+  anchorIndicator.children.forEach(c=>{
+    if(c.material&&c.material.emissiveIntensity!==undefined)
+      c.material.emissiveIntensity = 0.4+0.35*Math.sin(glowT*3);
+  });
+
+  // Fall simulation
+  if(isSimulating){
+    simT += dt;
+    const {platformH, lanyardL, R} = currentState;
+
+    if(simPhase===1){
+      // ── FREE FALL: worker topples off front edge ──
+      // Speed scaled to lanyard length: SRL=fast arrest, 1.8m=longer fall
+      // freeFall distance drives how far they drop
+      const freeFall = R.freeFall;
+
+      if(freeFall < 0.05){
+        // SRL: almost instant arrest — tiny drop, immediate Phase 2
+        workerGroup.position.y = simStartY - 0.04;
+        workerGroup.position.z = simStartZ + 0.05;
+        workerGroup.rotation.x = 0.08;
+        simPhase=2; simT=0;
+      } else {
+        // time-to-fall scales with sqrt(2*freeFall/g) — physics
+        // tScale: 1.8m → ~0.6s   1.2m → ~0.49s   0.6m → ~0.35s
+        const fallDuration = Math.sqrt(2 * freeFall / 9.8) * 1.1; // slight slow-mo
+        const tScale   = Math.min(simT, fallDuration);
+        const fallDist = Math.min(0.5 * 9.8 * tScale * tScale, freeFall);
+        const fallFrac = freeFall > 0 ? fallDist / freeFall : 1;
+
+        workerGroup.position.y = simStartY - fallDist;
+        // Longer lanyard → swings further outward from building
+        const maxSwingZ = 0.35 + freeFall * 0.22;
+        workerGroup.position.z = simStartZ + fallFrac * maxSwingZ;
+        workerGroup.rotation.x = fallFrac * (Math.PI * 0.20);
+
+        if(fallDist >= freeFall - 0.005){ simPhase=2; simT=0; }
+      }
+    }
+    else if(simPhase===2){
+      // ── DECELERATION: harness catches, rapid decel ──
+      // DECEL distance is constant (ANSI 1.07m) regardless of lanyard
+      // But SRL decelerates in shorter time (stiffer)
+      const decDuration = lanyardL >= 1.8 ? 0.55 :
+                          lanyardL >= 1.2 ? 0.45 : 0.25; // SRL very stiff
+      const decFrac = Math.min(simT / decDuration, 1.0);
+      const decDist = (DECEL + STRETCH) * decFrac;
+      const freeFall = R.freeFall;
+      const maxSwingZ = 0.35 + freeFall * 0.22;
+
+      workerGroup.position.y = simFreeFallEnd - decDist;
+      workerGroup.position.z = (simStartZ + maxSwingZ) - decFrac * 0.12;
+      workerGroup.rotation.x = (1 - decFrac) * (Math.PI * 0.20);
+
+      if(decDist >= DECEL + STRETCH - 0.001){ simPhase=3; simT=0; }
+    }
+    else if(simPhase===3){
+      // ── ARRESTED: hanging outside the building, slight pendulum sway ──
+      const sway = Math.sin(simT * 2.2) * 0.06 * Math.exp(-simT * 0.8);
+
+      if(R.clearOK){
+        // Safely arrested — hang in mid-air OUTSIDE the building
+        workerGroup.position.y = simFinalY + sway;
+        workerGroup.position.z = simFinalZ + sway * 0.5;
+        workerGroup.rotation.x = sway * 0.15;   // gentle pendulum tilt
+        workerGroup.rotation.z = 0;
+      } else {
+        // Ground impact — worker hits the GROUND OUTSIDE the building
+        if(simT < 0.15){
+          // Impact moment: fast crash to ground
+          workerGroup.position.y = Math.max(simFinalY - simT * 8, 0.0);
+          workerGroup.position.z = simFinalZ;
+          workerGroup.rotation.x = 0;
+        } else {
+          // Lying on ground outside
+          workerGroup.position.y = 0.0;
+          workerGroup.position.z = simFinalZ;
+          workerGroup.rotation.x = Math.PI / 2;   // body flat on ground (lying face-down)
+          workerGroup.rotation.z = 0.1;
+        }
+      }
+
+      if(simT > 5.5){
+        isSimulating = false;
+        workerGroup.rotation.set(0,0,0);
+        workerGroup.position.set(0.2, currentState.platformH, 2.4);
+        updateAll();
+        document.getElementById('btn-sim').textContent='▶ SIMULATE FALL';
+      }
+    }
+
+    updateLanyard(workerGroup.position.y, currentState.anchorH, currentState.lanyardL);
+  }
+
+  renderer.render(scene, camera);
+}
+
+// ═══════════════════════════════════════════════════════
+// RESIZE
+// ═══════════════════════════════════════════════════════
+window.addEventListener('resize',()=>{
+  const W=window.innerWidth,H=window.innerHeight;
+  camera.aspect=W/H; camera.updateProjectionMatrix();
+  renderer.setSize(W,H);
+});
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+updateAll();
+document.getElementById('btn-zones').classList.add('active');
+document.getElementById('btn-dims').classList.add('active');
+animate();
+</script>
+</body>
+</html>
